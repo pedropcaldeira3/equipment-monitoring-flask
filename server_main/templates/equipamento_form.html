@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Adicionar Equipamento</title>
+    <link rel="stylesheet" type="text/css" href="/static/css/styles.css">
+</head>
+<body>
+<div class="container">
+    <h2>Adicionar Equipamento</h2>
+
+    {% if erro %}
+    <div class="mensagem-erro">{{ erro }}</div>
+    {% endif %}
+
+    <form method="POST" action="/equipamento">
+        <div class="form-layout">
+            <div class="form-group">
+                <label for="numero_serie">Número de Série *</label>
+                <input type="text" id="numero_serie" name="numero_serie" required
+                       placeholder="ex: SN-001-2024">
+            </div>
+            <div class="form-group">
+                <label for="cliente_nif">Cliente (NIF) *</label>
+                <select id="cliente_nif" name="cliente_nif" required>
+                    <option value="">-- Selecionar cliente --</option>
+                    {% for c in clientes %}
+                    <option value="{{ c[0] }}">{{ c[0] }} — {{ c[1] }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <br>
+        <div class="form-actions">
+            <input type="submit" value="Registar Equipamento" class="submit-btn">
+            <a href="/" class="back-link">Voltar</a>
+        </div>
+    </form>
+</div>
+</body>
+</html>

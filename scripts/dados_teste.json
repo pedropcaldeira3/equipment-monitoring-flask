@@ -1,0 +1,33 @@
+{
+    "clientes": [
+        {
+            "NIF": "123456789",
+            "Nome": "Supermercados FreshCold Lda",
+            "Morada": "Rua das Indústrias, 42",
+            "CodigoPostal": "2700-123",
+            "Localidade": "Amadora",
+            "Area": "Alimentar",
+            "Zona": "Lisboa"
+        },
+        {
+            "NIF": "987654321",
+            "Nome": "Armazéns Norte Frio SA",
+            "Morada": "Avenida do Parque Industrial, 8",
+            "CodigoPostal": "4100-456",
+            "Localidade": "Porto",
+            "Area": "Logística",
+            "Zona": "Norte"
+        }
+    ],
+    "equipamentos": [
+        {
+            "NumeroSerie": "SN-TEST-001",
+            "Cliente_NIF": "123456789"
+        },
+        {
+            "NumeroSerie": "SN-TEST-002",
+            "Cliente_NIF": "987654321"
+        }
+    ],
+    "remover_apos_teste": false
+}

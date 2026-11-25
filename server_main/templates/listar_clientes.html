@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lista de Clientes</title>
+    <link rel="stylesheet" type="text/css" href="/static/css/styles.css">
+</head>
+<body>
+<div class="container">
+    <h2>Lista de Clientes</h2>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>NIF</th>
+                    <th>Nome</th>
+                    <th>Morada</th>
+                    <th>Cód. Postal</th>
+                    <th>Localidade</th>
+                    <th>Área</th>
+                    <th>Zona</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in clientes %}
+                <tr>
+                    <td>{{ c['NIF'] }}</td>
+                    <td>{{ c['Nome'] }}</td>
+                    <td>{{ c['Morada'] or '—' }}</td>
+                    <td>{{ c['CodigoPostal'] or '—' }}</td>
+                    <td>{{ c['Localidade'] or '—' }}</td>
+                    <td>{{ c['Area'] or '—' }}</td>
+                    <td>{{ c['Zona'] or '—' }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="7" style="text-align:center; color:#7f8c8d;">Nenhum cliente registado.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <a href="/" class="back-link">Voltar</a>
+</div>
+</body>
+</html>

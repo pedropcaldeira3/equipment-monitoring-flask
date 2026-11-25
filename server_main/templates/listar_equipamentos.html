@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lista de Equipamentos</title>
+    <link rel="stylesheet" type="text/css" href="/static/css/styles.css">
+</head>
+<body>
+<div class="container">
+    <h2>Lista de Equipamentos</h2>
+
+    <!-- Token JWT necessário para operações de escrita -->
+    <div class="token-area">
+        <label>Token JWT (para operações de Remover/Transferir)</label>
+        <input type="text" id="jwt-token" placeholder="Cole aqui o token obtido no login da página inicial">
+    </div>
+
+    <div id="mensagem-op" style="margin-bottom:12px;"></div>
+
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Número de Série</th>
+                    <th>NIF Cliente</th>
+                    <th>Nome Cliente</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody id="tabela-corpo">
+                {% for e in equipamentos %}
+                <tr id="linha-{{ e[0] }}">
+                    <td>{{ e[0] }}</td>
+                    <td>{{ e[1] }}</td>
+                    <td>{{ e[2] or '—' }}</td>
+                    <td>{{ e[3] or '—' }}</td>
+                    <td>
+                        <button class="btn-aviso"
+                                onclick="abrirTransferir({{ e[0] }})">
+                            Transferir
+                        </button>
+                        &nbsp;
+                        <button class="btn-perigo"
+                                onclick="removerEquipamento({{ e[0] }})">
+                            Remover
+                        </button>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="5" style="text-align:center; color:#7f8c8d;">Nenhum equipamento registado.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Painel de transferência (oculto por defeito) -->
+    <div id="painel-transferir" style="display:none; border:1px solid #f39c12; border-radius:6px; padding:14px; margin-top:10px; background:#fffbf0;">
+        <strong>Transferir Equipamento ID <span id="transfer-id-label"></span></strong>
+        <div class="form-layout" style="margin-top:10px;">
+            <div class="form-group">
+                <label>Novo NIF do Cliente</label>
+                <input type="text" id="transfer-nif" placeholder="ex: 987654321">
+            </div>
+        </div>
+        <br>
+        <button class="btn-aviso" onclick="confirmarTransferir()">Confirmar Transferência</button>
+        <button class="back-link" style="margin-left:8px; cursor:pointer;"
+                onclick="document.getElementById('painel-transferir').style.display='none'">
+            Cancelar
+        </button>
+    </div>
+
+    <br>
+    <a href="/" class="back-link">Voltar</a>
+</div>
+
+<script>
+    let equipIdAtivo = null;
+
+    function obterToken() {
+        return document.getElementById('jwt-token').value.trim();
+    }
+
+    function mostrarMensagem(texto, sucesso) {
+        const el = document.getElementById('mensagem-op');
+        el.className = sucesso ? 'mensagem-sucesso' : 'mensagem-erro';
+        el.textContent = texto;
+        // Limpar mensagem após 5 segundos
+        setTimeout(() => { el.textContent = ''; el.className = ''; }, 5000);
+    }
+
+    function abrirTransferir(id) {
+        equipIdAtivo = id;
+        document.getElementById('transfer-id-label').textContent = id;
+        document.getElementById('transfer-nif').value = '';
+        document.getElementById('painel-transferir').style.display = 'block';
+    }
+
+    async function confirmarTransferir() {
+        const token = obterToken();
+        const nif = document.getElementById('transfer-nif').value.trim();
+
+        if (!token) { mostrarMensagem('⚠️ Token JWT em falta. Cole o token na caixa acima.', false); return; }
+        if (!nif) { mostrarMensagem('⚠️ Introduza o NIF do novo cliente.', false); return; }
+
+        try {
+            const resp = await fetch(`/api/equipamentos/${equipIdAtivo}`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + token
+                },
+                body: JSON.stringify({ Cliente_NIF: nif })
+            });
+            const dados = await resp.json();
+            if (resp.ok) {
+                mostrarMensagem('✅ ' + dados.mensagem, true);
+                document.getElementById('painel-transferir').style.display = 'none';
+                // Atualizar NIF na tabela sem recarregar
+                const linha = document.getElementById(`linha-${equipIdAtivo}`);
+                if (linha) {
+                    linha.cells[2].textContent = nif;
+                    linha.cells[3].textContent = '(atualizado)';
+                }
+            } else {
+                mostrarMensagem('❌ ' + (dados.erro || 'Erro desconhecido'), false);
+            }
+        } catch (err) {
+            mostrarMensagem('❌ Erro de rede: ' + err.message, false);
+        }
+    }
+
+    async function removerEquipamento(id) {
+        const token = obterToken();
+        if (!token) { mostrarMensagem('⚠️ Token JWT em falta. Cole o token na caixa acima.', false); return; }
+        if (!confirm(`Confirmar remoção permanente do equipamento ID ${id}?`)) return;
+
+        try {
+            const resp = await fetch(`/api/equipamentos/${id}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': 'Bearer ' + token }
+            });
+            const dados = await resp.json();
+            if (resp.ok) {
+                mostrarMensagem('✅ ' + dados.mensagem, true);
+                // Remover linha da tabela dinamicamente
+                const linha = document.getElementById(`linha-${id}`);
+                if (linha) linha.remove();
+            } else {
+                mostrarMensagem('❌ ' + (dados.erro || 'Erro desconhecido'), false);
+            }
+        } catch (err) {
+            mostrarMensagem('❌ Erro de rede: ' + err.message, false);
+        }
+    }
+</script>
+</body>
+</html>

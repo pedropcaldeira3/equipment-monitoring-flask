@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Monitorização de Equipamentos</title>
+    <link rel="stylesheet" type="text/css" href="/static/css/styles.css">
+</head>
+<body>
+<div class="container">
+    <h2>Sistema de Monitorização de Equipamentos</h2>
+
+    <!-- ===================== Autenticação JWT ===================== -->
+    <div class="section">
+        <h3>🔐 Autenticação</h3>
+        <div class="form-layout">
+            <div class="form-group">
+                <label for="utilizador">Utilizador</label>
+                <input type="text" id="utilizador" value="admin" placeholder="admin">
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" value="" placeholder="password">
+            </div>
+        </div>
+        <br>
+        <button class="btn-secundario" onclick="efetuarLogin()">Iniciar Sessão</button>
+        <span id="estado-login" style="margin-left:12px; font-size:13px;"></span>
+        <br><br>
+        <div class="token-area" id="area-token" style="display:none;">
+            <label>Token JWT (guardado automaticamente)</label>
+            <input type="text" id="campo-token" readonly>
+        </div>
+    </div>
+
+    <!-- ===================== Gestão de Dados ===================== -->
+    <div class="section">
+        <h3>➕ Adicionar Dados</h3>
+        <ul class="menu-list">
+            <li><a href="cliente" class="menu-link">Adicionar Cliente</a></li>
+            <li><a href="equipamento" class="menu-link">Adicionar Equipamento</a></li>
+        </ul>
+    </div>
+
+    <!-- ===================== Consulta de Dados ===================== -->
+    <div class="section">
+        <h3>📋 Consultar Dados</h3>
+        <ul class="menu-list">
+            <li><a href="listar_clientes" class="menu-link">Listar Clientes</a></li>
+            <li><a href="listar_equipamentos" class="menu-link">Listar Equipamentos</a></li>
+            <li><a href="listar_temperaturas" class="menu-link">Listar Temperaturas</a></li>
+            <li><a href="/api/docs" class="menu-link" target="_blank">📖 Documentação API</a></li>
+        </ul>
+    </div>
+
+    <!-- ===================== Operações REST ===================== -->
+    <div class="section">
+        <h3>⚙️ Operações de Gestão (requer sessão iniciada)</h3>
+
+        <!-- Remover equipamento -->
+        <div style="margin-bottom: 18px;">
+            <strong>Remover Equipamento (DELETE)</strong>
+            <div class="form-layout" style="margin-top:8px;">
+                <div class="form-group">
+                    <label for="del-id">ID do Equipamento</label>
+                    <input type="number" id="del-id" placeholder="ex: 1" min="1">
+                </div>
+            </div>
+            <br>
+            <button class="btn-perigo" onclick="removerEquipamento()">Remover Equipamento</button>
+            <span id="resp-delete" style="margin-left:10px; font-size:13px;"></span>
+        </div>
+
+        <hr style="margin: 14px 0; border-color: #eee;">
+
+        <!-- Transferir equipamento -->
+        <div>
+            <strong>Transferir Equipamento para Novo Cliente (PATCH)</strong>
+            <div class="form-layout" style="margin-top:8px;">
+                <div class="form-group">
+                    <label for="patch-id">ID do Equipamento</label>
+                    <input type="number" id="patch-id" placeholder="ex: 1" min="1">
+                </div>
+                <div class="form-group">
+                    <label for="patch-nif">Novo NIF do Cliente</label>
+                    <input type="text" id="patch-nif" placeholder="ex: 123456789">
+                </div>
+            </div>
+            <br>
+            <button class="btn-aviso" onclick="transferirEquipamento()">Transferir Propriedade</button>
+            <span id="resp-patch" style="margin-left:10px; font-size:13px;"></span>
+        </div>
+    </div>
+
+    <!-- ===================== Sistema de Alertas ===================== -->
+    <div class="section">
+        <h3>🚨 Alertas de Sensores</h3>
+        <p style="font-size:13px; color:#7f8c8d; margin-bottom:12px;">
+            Anomalias de temperatura detetadas pelo sistema de monitorização ativa.
+        </p>
+        <button class="btn-secundario" onclick="atualizarAlertas()">🔄 Atualizar Alertas</button>
+        <span id="estado-alertas" style="margin-left:10px; font-size:13px;"></span>
+        <br><br>
+        <div id="zona-alertas">
+            <p class="alerta-vazio">Inicie sessão e clique em "Atualizar Alertas" para consultar.</p>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Token JWT guardado em variável de sessão (memória da página)
+    let jwtToken = '';
+
+    /**
+     * Efetua login na API e guarda o token JWT.
+     */
+    async function efetuarLogin() {
+        const utilizador = document.getElementById('utilizador').value.trim();
+        const password = document.getElementById('password').value.trim();
+        const estadoEl = document.getElementById('estado-login');
+
+        estadoEl.textContent = 'A autenticar...';
+
+        try {
+            const resp = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ utilizador, password })
+            });
+            const dados = await resp.json();
+
+            if (resp.ok) {
+                jwtToken = dados.token;
+                document.getElementById('campo-token').value = jwtToken;
+                document.getElementById('area-token').style.display = 'block';
+                estadoEl.textContent = '✅ Sessão iniciada com sucesso!';
+                estadoEl.style.color = 'green';
+            } else {
+                estadoEl.textContent = '❌ ' + (dados.erro || 'Erro de autenticação');
+                estadoEl.style.color = 'red';
+            }
+        } catch (err) {
+            estadoEl.textContent = '❌ Erro de rede: ' + err.message;
+            estadoEl.style.color = 'red';
+        }
+    }
+
+    /**
+     * Remove um equipamento pelo ID via DELETE (requer JWT).
+     */
+    async function removerEquipamento() {
+        const id = document.getElementById('del-id').value.trim();
+        const respEl = document.getElementById('resp-delete');
+
+        if (!id) { respEl.textContent = '⚠️ Indique o ID do equipamento.'; return; }
+        if (!jwtToken) { respEl.textContent = '⚠️ Inicie sessão primeiro.'; return; }
+
+        if (!confirm(`Confirmar remoção permanente do equipamento ID ${id}?`)) return;
+
+        try {
+            const resp = await fetch(`/api/equipamentos/${id}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': 'Bearer ' + jwtToken }
+            });
+            const dados = await resp.json();
+            respEl.textContent = resp.ok
+                ? '✅ ' + dados.mensagem
+                : '❌ ' + (dados.erro || 'Erro desconhecido');
+            respEl.style.color = resp.ok ? 'green' : 'red';
+        } catch (err) {
+            respEl.textContent = '❌ Erro de rede: ' + err.message;
+            respEl.style.color = 'red';
+        }
+    }
+
+    /**
+     * Transfere um equipamento para outro cliente via PATCH (requer JWT).
+     */
+    async function transferirEquipamento() {
+        const id = document.getElementById('patch-id').value.trim();
+        const nif = document.getElementById('patch-nif').value.trim();
+        const respEl = document.getElementById('resp-patch');
+
+        if (!id || !nif) { respEl.textContent = '⚠️ Preencha o ID e o NIF do novo cliente.'; return; }
+        if (!jwtToken) { respEl.textContent = '⚠️ Inicie sessão primeiro.'; return; }
+
+        try {
+            const resp = await fetch(`/api/equipamentos/${id}`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + jwtToken
+                },
+                body: JSON.stringify({ Cliente_NIF: nif })
+            });
+            const dados = await resp.json();
+            respEl.textContent = resp.ok
+                ? '✅ ' + dados.mensagem
+                : '❌ ' + (dados.erro || 'Erro desconhecido');
+            respEl.style.color = resp.ok ? 'green' : 'red';
+        } catch (err) {
+            respEl.textContent = '❌ Erro de rede: ' + err.message;
+            respEl.style.color = 'red';
+        }
+    }
+
+    /**
+     * Consulta o histórico de alertas via GET /api/alertas (requer JWT).
+     * Manipula o DOM injetando novos elementos sem recarregar a página (polling manual).
+     */
+    async function atualizarAlertas() {
+        const zonaEl = document.getElementById('zona-alertas');
+        const estadoEl = document.getElementById('estado-alertas');
+
+        if (!jwtToken) {
+            estadoEl.textContent = '⚠️ Inicie sessão primeiro.';
+            return;
+        }
+
+        estadoEl.textContent = '⏳ A carregar...';
+
+        try {
+            const resp = await fetch('/api/alertas', {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + jwtToken
+                }
+            });
+
+            if (!resp.ok) {
+                const erro = await resp.json();
+                estadoEl.textContent = '❌ ' + (erro.erro || 'Erro ao carregar alertas');
+                return;
+            }
+
+            const alertas = await resp.json();
+
+            // Limpar zona antes de injetar novos dados
+            zonaEl.innerHTML = '';
+
+            if (alertas.length === 0) {
+                zonaEl.innerHTML = '<p class="alerta-vazio">✅ Sem alertas registados.</p>';
+                estadoEl.textContent = `Atualizado: ${new Date().toLocaleTimeString('pt-PT')}`;
+                return;
+            }
+
+            // Percorrer alertas e injetar elementos no DOM dinamicamente
+            alertas.forEach(alerta => {
+                const div = document.createElement('div');
+                div.className = 'alerta-item';
+                div.innerHTML = `
+                    <strong>${alerta.Sensor_tipo.toUpperCase()}</strong>
+                    — Equipamento ID: <strong>${alerta.Equipamento_ID}</strong>
+                    (${alerta.NumeroSerie || '—'})
+                    | Leitura: <strong>${alerta.Leitura}°C</strong>
+                    | Limite: [${alerta.Min_val}°C, ${alerta.Max_val}°C]
+                    <br>
+                    <small style="color:#7f8c8d;">${alerta.DataHora}</small>
+                `;
+                zonaEl.appendChild(div);
+            });
+
+            estadoEl.textContent = `${alertas.length} alerta(s) — ${new Date().toLocaleTimeString('pt-PT')}`;
+            estadoEl.style.color = alertas.length > 0 ? 'red' : 'green';
+
+        } catch (err) {
+            estadoEl.textContent = '❌ Erro de rede: ' + err.message;
+            estadoEl.style.color = 'red';
+        }
+    }
+</script>
+</body>
+</html>

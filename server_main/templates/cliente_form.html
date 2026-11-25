@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Adicionar Cliente</title>
+    <link rel="stylesheet" type="text/css" href="/static/css/styles.css">
+</head>
+<body>
+<div class="container">
+    <h2>Adicionar Cliente</h2>
+
+    {% if erro %}
+    <div class="mensagem-erro">{{ erro }}</div>
+    {% endif %}
+
+    <form method="POST" action="/cliente">
+        <div class="form-layout">
+            <div class="form-group">
+                <label for="nif">NIF *</label>
+                <input type="text" id="nif" name="nif" required
+                       placeholder="ex: 123456789"
+                       pattern="\d{9}"
+                       title="O NIF deve ter 9 dígitos"
+                       oninvalid="this.setCustomValidity('Introduza um NIF com 9 dígitos')"
+                       oninput="this.setCustomValidity('')">
+            </div>
+            <div class="form-group">
+                <label for="nome">Nome *</label>
+                <input type="text" id="nome" name="nome" required placeholder="Nome do cliente ou empresa">
+            </div>
+            <div class="form-group">
+                <label for="morada">Morada</label>
+                <input type="text" id="morada" name="morada" placeholder="Rua, número">
+            </div>
+            <div class="form-group">
+                <label for="codigo_postal">Código Postal</label>
+                <input type="text" id="codigo_postal" name="codigo_postal"
+                       placeholder="ex: 1234-567"
+                       pattern="\d{4}-\d{3}"
+                       title="Formato: 1234-567"
+                       oninvalid="this.setCustomValidity('Formato esperado: 1234-567')"
+                       oninput="this.setCustomValidity('')">
+            </div>
+            <div class="form-group">
+                <label for="localidade">Localidade</label>
+                <input type="text" id="localidade" name="localidade" placeholder="ex: Lisboa">
+            </div>
+            <div class="form-group">
+                <label for="area">Área</label>
+                <input type="text" id="area" name="area" placeholder="ex: Alimentar">
+            </div>
+            <div class="form-group">
+                <label for="zona">Zona</label>
+                <input type="text" id="zona" name="zona" placeholder="ex: Norte">
+            </div>
+        </div>
+        <br>
+        <div class="form-actions">
+            <input type="submit" value="Guardar Cliente" class="submit-btn">
+            <a href="/" class="back-link">Voltar</a>
+        </div>
+    </form>
+</div>
+</body>
+</html>
