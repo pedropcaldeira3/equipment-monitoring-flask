@@ -108,7 +108,14 @@ curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/api/alertas
 
 ## Verification
 
-Checked from a fresh clone, following this README (Python 3.13, package versions resolved from `requirements.txt`): see the commit history for the date. The regression tests pass with `pytest`, and against a running server `scripts/teste_sistema.py`, the sensor simulator, login, `PUT`, `PATCH` and `DELETE` behave as described above.
+Checked from a fresh clone of this repository, following the steps above (Python 3.13, package versions resolved from `requirements.txt`):
+
+- `pytest`: all regression tests pass;
+- `scripts/teste_sistema.py` against the running server: token obtained, 401 without a token, equipment created, the normal reading produced no alert and the anomalous one exactly one, 404 for a missing resource;
+- the simulator sent readings for equipment 1 for about 20 seconds without producing alerts;
+- `PUT` with an existing serial number returned 409 and left the database unchanged; a valid `PUT` returned 200;
+- four consecutive `PATCH` transfers in the same second returned 200 and left a contiguous history with no `DataFim` earlier than `DataInicio`;
+- `DELETE` returned 200 with a token and 401 without; a wrong password returned 401; all HTML pages and `/api/docs` returned 200.
 
 `teste_sistema.py` is a verification script that runs against a live server; the `tests/` suite is the automated part.
 
