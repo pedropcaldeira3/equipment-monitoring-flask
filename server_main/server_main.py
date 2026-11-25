@@ -679,6 +679,35 @@ def api_remover_equipamento(equip_id):
     }), 200
 
 
+def transferir_propriedade(db, equip_id, novo_nif):
+    """Fecha o registo de propriedade aberto e abre um novo para novo_nif.
+
+    O fim do registo anterior e o inicio do novo usam o mesmo instante, em UTC e
+    no mesmo formato do CURRENT_TIMESTAMP do SQLite (usado ao criar equipamentos).
+    O instante nunca e anterior ao inicio do registo aberto, por isso DataFim >= DataInicio
+    mesmo em transferencias consecutivas no mesmo segundo. Deve ser chamada dentro
+    de uma transacao. Devolve o instante usado."""
+    aberto = db.execute('''
+        SELECT DataInicio FROM PropriedadeEquipamento
+         WHERE Equipamento_ID = ? AND DataFim IS NULL
+         ORDER BY ID DESC LIMIT 1
+    ''', (equip_id,)).fetchone()
+
+    instante = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    if aberto and aberto['DataInicio'] and str(aberto['DataInicio']) > instante:
+        instante = str(aberto['DataInicio'])
+
+    db.execute('''
+        UPDATE PropriedadeEquipamento SET DataFim = ?
+         WHERE Equipamento_ID = ? AND DataFim IS NULL
+    ''', (instante, equip_id))
+    db.execute('''
+        INSERT INTO PropriedadeEquipamento (Equipamento_ID, Cliente_NIF, DataInicio)
+        VALUES (?, ?, ?)
+    ''', (equip_id, novo_nif, instante))
+    return instante
+
+
 @app.route('/api/equipamentos/<int:equip_id>', methods=['PATCH'])
 @verificar_token
 def api_transferir_equipamento(equip_id):
@@ -723,42 +752,27 @@ def api_transferir_equipamento(equip_id):
         return jsonify({'erro': 'Campo obrigatorio em falta: Cliente_NIF'}), 400
 
     db = get_db()
-    cursor = db.cursor()
+    try:
+        # Transacao exclusiva: validacoes e escrita sem interferencia de pedidos concorrentes
+        db.execute("BEGIN IMMEDIATE")
 
-    cursor.execute("SELECT ID FROM Equipamento WHERE ID = ?", (equip_id,))
-    if not cursor.fetchone():
-        return jsonify({'erro': f'Equipamento com ID {equip_id} nao encontrado'}), 404
+        if not db.execute("SELECT ID FROM Equipamento WHERE ID = ?", (equip_id,)).fetchone():
+            db.rollback()
+            return jsonify({'erro': f'Equipamento com ID {equip_id} nao encontrado'}), 404
 
-    cursor.execute("SELECT NIF FROM Cliente WHERE NIF = ?", (novo_nif,))
-    if not cursor.fetchone():
-        return jsonify({'erro': f'Cliente com NIF {novo_nif} nao encontrado'}), 404
+        if not db.execute("SELECT NIF FROM Cliente WHERE NIF = ?", (novo_nif,)).fetchone():
+            db.rollback()
+            return jsonify({'erro': f'Cliente com NIF {novo_nif} nao encontrado'}), 404
 
-    # Registar o momento exato da transferencia
-    agora = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    # Fechar o registo de propriedade atual
-    cursor.execute('''
-        UPDATE PropriedadeEquipamento
-           SET DataFim = ?
-         WHERE Equipamento_ID = ? AND DataFim IS NULL
-    ''', (agora, equip_id))
-
-    # Abrir novo registo de propriedade com +1 segundo para respeitar o CHECK constraint
-    # (DataFim IS NULL OR DataFim > DataInicio)
-    novo_inicio = (
-        datetime.datetime.strptime(agora, "%Y-%m-%d %H:%M:%S")
-        + datetime.timedelta(seconds=1)
-    ).strftime("%Y-%m-%d %H:%M:%S")
-
-    cursor.execute('''
-        INSERT INTO PropriedadeEquipamento (Equipamento_ID, Cliente_NIF, DataInicio)
-        VALUES (?, ?, ?)
-    ''', (equip_id, novo_nif, novo_inicio))
-    db.commit()
+        instante = transferir_propriedade(db, equip_id, novo_nif)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
 
     return jsonify({
         'mensagem': f'Equipamento ID {equip_id} transferido para cliente NIF {novo_nif}',
-        'data_transferencia': agora
+        'data_transferencia': instante
     }), 200
 
 
@@ -797,6 +811,8 @@ def api_substituir_equipamento(equip_id):
         description: Nao autorizado
       404:
         description: Equipamento ou cliente nao encontrado
+      409:
+        description: Numero de serie ja usado por outro equipamento (nada e alterado)
     """
     data = request.get_json()
     if not data:
@@ -808,33 +824,34 @@ def api_substituir_equipamento(equip_id):
         return jsonify({'erro': 'Campos obrigatorios em falta: NumeroSerie, Cliente_NIF'}), 400
 
     db = get_db()
-    cursor = db.cursor()
+    try:
+        # Transacao exclusiva: ou todas as alteracoes sao gravadas, ou nenhuma
+        db.execute("BEGIN IMMEDIATE")
 
-    cursor.execute("SELECT ID FROM Equipamento WHERE ID = ?", (equip_id,))
-    if not cursor.fetchone():
-        return jsonify({'erro': f'Equipamento com ID {equip_id} nao encontrado'}), 404
+        if not db.execute("SELECT ID FROM Equipamento WHERE ID = ?", (equip_id,)).fetchone():
+            db.rollback()
+            return jsonify({'erro': f'Equipamento com ID {equip_id} nao encontrado'}), 404
 
-    cursor.execute("SELECT NIF FROM Cliente WHERE NIF = ?", (novo_nif,))
-    if not cursor.fetchone():
-        return jsonify({'erro': f'Cliente com NIF {novo_nif} nao encontrado'}), 404
+        if not db.execute("SELECT NIF FROM Cliente WHERE NIF = ?", (novo_nif,)).fetchone():
+            db.rollback()
+            return jsonify({'erro': f'Cliente com NIF {novo_nif} nao encontrado'}), 404
 
-    agora = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    novo_inicio = (
-        datetime.datetime.strptime(agora, "%Y-%m-%d %H:%M:%S")
-        + datetime.timedelta(seconds=1)
-    ).strftime("%Y-%m-%d %H:%M:%S")
+        # O numero de serie e unico: recusar se pertencer a outro equipamento
+        if db.execute("SELECT ID FROM Equipamento WHERE NumeroSerie = ? AND ID <> ?",
+                      (numero_serie, equip_id)).fetchone():
+            db.rollback()
+            return jsonify({'erro': f'Numero de serie {numero_serie} ja existe noutro equipamento'}), 409
 
-    cursor.execute("UPDATE Equipamento SET NumeroSerie = ? WHERE ID = ?",
+        db.execute("UPDATE Equipamento SET NumeroSerie = ? WHERE ID = ?",
                    (numero_serie, equip_id))
-    cursor.execute('''
-        UPDATE PropriedadeEquipamento SET DataFim = ?
-         WHERE Equipamento_ID = ? AND DataFim IS NULL
-    ''', (agora, equip_id))
-    cursor.execute('''
-        INSERT INTO PropriedadeEquipamento (Equipamento_ID, Cliente_NIF, DataInicio)
-        VALUES (?, ?, ?)
-    ''', (equip_id, novo_nif, novo_inicio))
-    db.commit()
+        transferir_propriedade(db, equip_id, novo_nif)
+        db.commit()
+    except sqlite3.IntegrityError:
+        db.rollback()
+        return jsonify({'erro': 'Conflito de dados: o pedido viola uma restricao de integridade'}), 409
+    except Exception:
+        db.rollback()
+        raise
 
     return jsonify({
         'mensagem': f'Equipamento ID {equip_id} atualizado com sucesso',

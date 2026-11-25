@@ -31,6 +31,11 @@ BASE_URL = f"http://{HOST}:{PORT}"
 
 FICHEIRO_DADOS = os.path.join(os.path.dirname(__file__), "dados_teste.json")
 
+# Leituras de teste (temp0, temp1, temp2), coerentes com os limites em limites_sensores:
+# temp0 [-28, -18], temp1 [-20, -10], temp2 [0, 50]
+TEMPERATURA_NORMAL = (-21.0, -15.0, 19.0)   # todos os sensores dentro dos limites
+TEMPERATURA_ANOMALA = (50.0, -15.0, 19.0)   # so temp0 fora dos limites -> 1 alerta
+
 # Cores ANSI para output no terminal
 VERDE = "\033[92m"
 VERMELHO = "\033[91m"
@@ -156,6 +161,15 @@ def testar_alertas(token):
         erro(f"Erro ao consultar alertas: {resp.status_code} - {resp.text}")
         return []
 
+def contar_alertas(token, equip_id):
+    """Devolve o número de alertas registados para um equipamento."""
+    resp = requests.get(f"{BASE_URL}/api/alertas/{equip_id}",
+                        headers={"Authorization": f"Bearer {token}"}, timeout=10)
+    if resp.status_code != 200:
+        erro(f"Erro ao consultar alertas do equipamento {equip_id}: {resp.status_code}")
+        return 0
+    return len(resp.json())
+
 def testar_remover_equipamento(token, equip_id):
     """Remove um equipamento via DELETE e verifica o resultado."""
     resp = requests.delete(f"{BASE_URL}/api/equipamentos/{equip_id}",
@@ -242,14 +256,27 @@ def main():
     # --- 5. Enviar temperaturas normais ---
     secao("Envio de Temperaturas (valores normais)")
     if ids_criados:
-        testar_enviar_temperatura(token, ids_criados[0], -11.0, -21.0, 19.0)
+        antes = contar_alertas(token, ids_criados[0])
+        testar_enviar_temperatura(token, ids_criados[0], *TEMPERATURA_NORMAL)
+        time.sleep(1)  # Aguardar processamento assíncrono dos alertas
+        novos = contar_alertas(token, ids_criados[0]) - antes
+        if novos == 0:
+            ok("Leitura normal não gerou alertas")
+        else:
+            erro(f"Leitura normal gerou {novos} alerta(s); esperado: 0")
 
     # --- 6. Enviar temperatura anómala para gerar alerta ---
     secao("Envio de Temperatura Anómala (deve gerar alerta)")
     if ids_criados:
-        # Temp0 = 50°C está fora do intervalo [-28, -18] → deve gerar alerta
-        testar_enviar_temperatura(token, ids_criados[0], 50.0, -21.0, 19.0)
+        # Temp0 = 50°C está fora do intervalo [-28, -18] → deve gerar exatamente 1 alerta
+        antes = contar_alertas(token, ids_criados[0])
+        testar_enviar_temperatura(token, ids_criados[0], *TEMPERATURA_ANOMALA)
         time.sleep(1)  # Aguardar processamento assíncrono do alerta
+        novos = contar_alertas(token, ids_criados[0]) - antes
+        if novos == 1:
+            ok("Leitura anómala gerou 1 alerta (temp0)")
+        else:
+            erro(f"Leitura anómala gerou {novos} alerta(s); esperado: 1")
 
     # --- 7. Verificar alertas ---
     secao("Verificação de Alertas")

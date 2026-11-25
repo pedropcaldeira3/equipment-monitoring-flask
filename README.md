@@ -16,14 +16,15 @@ No licence is included: the base code belongs to its author and is published her
 ## Features
 
 - **Clients and equipment:** create and list clients (identified by NIF) and equipment (serial number), through HTML forms and the JSON API.
-- **Equipment life cycle:** `GET`, `PUT`, `PATCH` and `DELETE` on `/api/equipamentos/<id>`. `PATCH` transfers a unit to another client by closing the current ownership record and opening a new one, so the ownership history is kept. Deleting a unit removes its dependent records through `ON DELETE CASCADE`.
+- **Equipment life cycle:** `GET`, `PUT`, `PATCH` and `DELETE` on `/api/equipamentos/<id>`. `PATCH` transfers a unit to another client by closing the current ownership record and opening a new one at the same instant, so the ownership history is kept without gaps or overlaps. `PUT` replaces the serial number and owner; a serial number already used by another unit is rejected with `409 Conflict`. Both run in a single database transaction, so a failed request changes nothing. Deleting a unit removes its dependent records through `ON DELETE CASCADE`.
 - **Temperature readings:** `POST /temperatura` accepts JSON readings with three sensor values (`temp0`, `temp1`, `temp2`); the CSV format of the original base is still accepted.
 - **Alerts:** acceptable ranges per sensor are stored in the `limites_sensores` table. After answering the request, the server checks each reading in a background thread and writes out-of-range values to `alertas_sensores`.
 - **Authentication:** `POST /api/auth/login` returns a JWT (valid for 24 h); write operations and the alerts endpoints require `Authorization: Bearer <token>`.
 - **API documentation:** Swagger UI generated with Flasgger at `/api/docs`.
 - **Front end:** Jinja2 templates plus a static page that calls the API with `fetch` and updates the DOM (delete and transfer without reloading). CSS includes a single-column layout for screens up to 640 px.
-- **Sensor simulator:** `client_temp/temp_rand_main.py` logs in, then sends random readings for one unit every 10 seconds.
-- **Verification script:** `scripts/teste_sistema.py` creates sample data through the API, sends normal and anomalous readings, lists the resulting alerts and checks some HTTP status codes.
+- **Sensor simulator:** `client_temp/temp_rand_main.py` logs in, then sends random readings for one unit every 10 seconds, within the configured normal ranges (`temp0` −28…−18 °C, `temp1` −20…−10 °C, `temp2` 0…50 °C).
+- **Verification script:** `scripts/teste_sistema.py` creates sample data through the API, sends a normal reading (expects no alert) and an anomalous one (expects one alert), lists the alerts and checks some HTTP status codes.
+- **Regression tests:** `tests/` contains `pytest` tests that use Flask's test client and a temporary database.
 
 | Equipment list | Temperature readings |
 |---|---|
@@ -39,6 +40,7 @@ No licence is included: the base code belongs to its author and is published her
 server_main/        Flask server (server_main.py), templates and static files
 client_temp/        temperature sensor simulator
 scripts/            database creation, verification script and its sample data
+tests/              pytest regression tests
 db/                 SQLite schema (5_IMPLEMENTACAO_v3.sql)
 ```
 
@@ -77,6 +79,17 @@ python client_temp/temp_rand_main.py 1   # send simulated readings for equipment
 python scripts/teste_sistema.py          # run the verification script
 ```
 
+### Tests
+
+The regression tests do not need a running server:
+
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
+
+They cover: `PUT` with a serial number that already exists (409, nothing changed), a valid `PUT`, several consecutive `PATCH` transfers (history stays ordered and contiguous, exactly one open record), a transfer to an unknown client (404, nothing changed), and normal vs. anomalous readings (simulator ranges and verification-script samples inside the configured limits; a normal reading creates no alert, an anomalous one creates exactly one).
+
 ### Example API calls
 
 ```bash
@@ -95,28 +108,28 @@ curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/api/alertas
 
 ## Verification
 
-Run locally (Python 3.13, the package versions resolved from `requirements.txt`):
+Checked from a fresh clone, following this README (Python 3.13, package versions resolved from `requirements.txt`): see the commit history for the date. The regression tests pass with `pytest`, and against a running server `scripts/teste_sistema.py`, the sensor simulator, login, `PUT`, `PATCH` and `DELETE` behave as described above.
 
-- `scripts/create_db.py` created the database and sample data;
-- `scripts/teste_sistema.py` completed: token obtained, `/api/alertas` rejected without a token (401), equipment created, normal and anomalous readings sent, alerts listed, 404 for a missing resource;
-- two consecutive ownership transfers with `PATCH` returned 200 and both were kept in `PropriedadeEquipamento`;
-- `DELETE` returned 200 with a token and 401 without one; a wrong password returned 401;
-- the sensor simulator authenticated and its readings were stored.
-
-There is no automated unit-test suite in this repository; `teste_sistema.py` is a manual verification script that runs against a live server.
+`teste_sistema.py` is a verification script that runs against a live server; the `tests/` suite is the automated part.
 
 ## Changes from the submitted version
 
-Made for publication; the application logic is unchanged:
+Made for publication:
 
 - the login credentials and JWT signing key, previously fixed in the code, are read from environment variables (also in the simulator and verification script), and the login form no longer pre-fills the password;
 - the server listens on `127.0.0.1` with debug mode off by default (both configurable);
 - student numbers were removed from file headers;
 - the generated database, the project report and editor/cache files were not included; `requirements.txt` and `.env.example` were added.
 
+Fixes made after publication:
+
+- `PUT` with a serial number already used by another unit returned `500` (unhandled `sqlite3.IntegrityError`); it now returns `409` and the request changes nothing;
+- two quick `PATCH` transfers could record an ownership end (`DataFim`) earlier than its start (`DataInicio`), because each new record started one second after the transfer time and server times were local while database defaults are UTC; transfers now close and open records at the same UTC instant, never before the current record's start, inside one transaction;
+- the simulator's normal ranges and the verification script's "normal" sample were outside the configured limits for `temp0` and `temp1`, so they produced alerts; both now use values inside the limits, and the script checks the number of alerts produced;
+- `pytest` regression tests were added for these cases.
+
 ## Known limitations
 
 - Single demo user; no user management.
 - The server emits a Socket.IO event when temperatures are listed, but no page subscribes to it, so pages do not update by themselves.
-- The simulator's value ranges do not match the default limits for `temp0` and `temp1`, so most simulated readings for those sensors generate alerts.
 - Runs on Flask's development server with SQLite; it is a course project, not a production deployment.

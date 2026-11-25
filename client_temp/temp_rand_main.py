@@ -23,9 +23,11 @@ from datetime import datetime
 # Configuracao
 # ---------------------------------------------------------------------------
 
-# Intervalos de geracao de temperatura por sensor
-x_0 = -10.00; y_0 = -12.00   # temp0: camara de congelacao A
-x_1 = -20.00; y_1 = -22.00   # temp1: camara de congelacao B
+# Intervalos de geracao de temperatura por sensor (funcionamento normal).
+# Ficam dentro dos limites definidos em limites_sensores (db/5_IMPLEMENTACAO_v3.sql):
+# temp0 [-28, -18], temp1 [-20, -10], temp2 [0, 50]
+x_0 = -22.00; y_0 = -20.00   # temp0: camara de congelacao A
+x_1 = -16.00; y_1 = -14.00   # temp1: camara de congelacao B
 x_2 =  18.00; y_2 =  20.00   # temp2: ambiente sala tecnica
 
 # Intervalo entre leituras (segundos)
